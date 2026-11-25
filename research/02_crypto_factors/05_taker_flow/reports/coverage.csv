@@ -1,0 +1,12 @@
+,value
+symbols_in_universe,673.0
+symbols_missing,3.0
+universe_coin_days,474720.0
+with_klines,471437.0
+coverage,0.9930843444556792
+coverage_top100,0.9947718309859155
+volume_ratio_median,1.000045183348353
+volume_ratio_p05,0.9969532285625406
+volume_ratio_p95,1.0038517945783927
+daily_imbalance_median,-0.02499015902684215
+daily_imbalance_sd,0.03692205516050916

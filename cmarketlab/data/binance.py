@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -24,12 +25,25 @@ COLS = ["open_time", "open", "high", "low", "close", "volume", "close_time", "qu
         "taker_buy_volume", "taker_buy_quote_volume", "ignore"]
 
 
+class UnknownSymbol(Exception):
+    """Binance answered 400 (e.g. a delisted contract that no longer has klines)."""
+
+
 def _get(url: str, params: dict, tries: int = 5):
     q = url + "?" + urllib.parse.urlencode(params)
     for k in range(tries):
         try:
             with urllib.request.urlopen(q, timeout=30) as r:
                 return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 400:
+                raise UnknownSymbol(params.get("symbol")) from e
+            if e.code in (418, 429):          # rate limited: honour Retry-After, then retry
+                time.sleep(int(e.headers.get("Retry-After", 60)))
+                continue
+            if k == tries - 1:
+                raise
+            time.sleep(2 ** k)
         except Exception:
             if k == tries - 1:
                 raise
@@ -124,3 +138,38 @@ def funding_history(symbol: str = "BTCUSDT", refresh: bool = True) -> pd.Series:
                   name="funding_rate")
     s.index.name = "time"
     return s
+
+
+def usdm_daily_panel(symbols, fields=("quote_volume", "taker_buy_quote_volume", "trades"), fetch: bool = True,
+                     pause: float = 0.5, log=print) -> dict:
+    """Wide daily USD-M kline fields for many base assets: {field: DataFrame(index = UTC day, columns = base)}.
+
+    `symbols` are base assets as in the perps file ("BTC", "1000PEPE"); the contract is base + "USDT". Each symbol
+    is cached on its own (cache/binance_usdm_<SYM>USDT_1d.parquet). fetch=False uses the cache only; fetch=True
+    fetches symbols with no cache yet (it does not extend existing caches). Delisted contracts that Binance no
+    longer serves are skipped and reported in the result's "missing" entry.
+    """
+    frames, missing = {}, []
+    for i, s in enumerate(symbols):
+        p = cache_path("binance_usdm_%sUSDT_1d.parquet" % s)
+        if p.exists():
+            df = pd.read_parquet(p).set_index("date")
+        elif fetch:
+            try:
+                df = klines(s + "USDT", "1d", "usdm", refresh=True)
+            except UnknownSymbol:
+                missing.append(s)
+                continue
+            time.sleep(pause)
+        else:
+            missing.append(s)
+            continue
+        if df.empty:
+            missing.append(s)
+            continue
+        frames[s] = df
+        if log and (i + 1) % 50 == 0:
+            log("%d / %d symbols" % (i + 1, len(symbols)))
+    out = {f: pd.DataFrame({s: d[f] for s, d in frames.items()}).sort_index() for f in fields}
+    out["missing"] = missing
+    return out

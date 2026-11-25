@@ -224,3 +224,25 @@ def price_volume_corr(ret: pd.DataFrame, quote_volume: pd.DataFrame, n: int = 30
 def vol_compression(high: pd.DataFrame, low: pd.DataFrame, short: int = 14, long: int = 90) -> pd.DataFrame:
     """log(short-window range vol / long-window range vol): < 0 = volatility squeeze."""
     return np.log(range_vol(high, low, short) / range_vol(high, low, long))
+
+
+# ---- taker order flow (Binance klines: taker_buy_quote_volume, quote_volume, trades)
+
+def taker_imbalance(taker_buy: pd.DataFrame, quote_volume: pd.DataFrame, n: int = 7) -> pd.DataFrame:
+    """(taker buys - taker sells) / total taker volume over n days, in [-1, 1] (+: aggressive buying)."""
+    mp = min(n, _mp(n))
+    b = taker_buy.rolling(n, min_periods=mp).sum()
+    v = quote_volume.rolling(n, min_periods=mp).sum()
+    return (2 * b - v) / v.where(v > 0)
+
+
+def taker_shift(taker_buy: pd.DataFrame, quote_volume: pd.DataFrame, short: int = 7, long: int = 60) -> pd.DataFrame:
+    """Change in buying pressure: short-window taker imbalance minus the long-window one."""
+    return taker_imbalance(taker_buy, quote_volume, short) - taker_imbalance(taker_buy, quote_volume, long)
+
+
+def trade_size(quote_volume: pd.DataFrame, trades: pd.DataFrame, n: int = 30) -> pd.DataFrame:
+    """log of the average trade size in USD over n days (large = institutional / whale activity)."""
+    v = quote_volume.rolling(n, min_periods=_mp(n)).sum()
+    k = trades.rolling(n, min_periods=_mp(n)).sum()
+    return np.log(v / k.where(k > 0))

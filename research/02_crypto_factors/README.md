@@ -29,6 +29,7 @@ regressions.
 | [02_univariate](02_univariate/README.md) | Deciles on 50 characteristics in six families (momentum, risk, size and liquidity, perp microstructure, technical, funding) | One trend cluster (t 2–3.4) and one robust microstructure factor, liquidation imbalance |
 | [03_multivariate](03_multivariate/README.md) | Fama–MacBeth and spanning tests | The trend measures are one factor. Open-interest leverage, open-interest growth and liquidation imbalance price returns beyond it |
 | [04_momentum_regimes](04_momentum_regimes/README.md) | When trend pays | Up-trending, calm markets; it fails in bear-market rebounds and was flat until 2024 |
+| [05_taker_flow](05_taker_flow/README.md) | Taker buy/sell imbalance from Binance klines; adds a third version, top100_oiw (top 100, OI-weighted) | 7-day taker imbalance t 3.7–4.2, positive every year; overlaps strongly with liquidation imbalance and replaces it in regressions |
 
 ## Findings
 
@@ -66,6 +67,14 @@ regressions.
    - Short-term reversal and 7-day momentum don't work either.
    - Size flips sign between sorts and regressions.
 
+6. **Taker order flow (part 05) is the strongest single signal.**
+   - Coins with net taker buying over 7 days beat net-selling coins by +83 % to +114 % a year (t 3.7–4.2).
+   - It is positive every year and already worked before 2025 (t 1.7–2.7).
+   - It is largely the same information as liquidation imbalance (correlation about −0.7) and replaces it in
+     Fama–MacBeth.
+   - Top-100 coins weighted by open interest is the best version for ma50 and liquidations. ma50 +
+     liquidations, inverse-vol weighted, reaches Sharpe 2.2; adding a taker leg takes it to 2.3.
+
 ## Caveats
 
 - **Short history:** 4.8 years with one bear market (2022) and one long bull (2023–26). The momentum result rests
@@ -80,7 +89,6 @@ regressions.
   leverage reading.
 - Out-of-sample check when the perps data is refreshed past 2026-10.
 - Hourly data for faster microstructure signals (liquidation bursts, funding spikes, open-interest jumps).
-- Taker-flow imbalance (not in the perps file; Binance klines have it).
 
 ## Layout
 
@@ -91,6 +99,7 @@ regressions.
   02_univariate/run.py   sorts | robust | show
   03_multivariate/run.py fmb | compact | spanning
   04_momentum_regimes/run.py
+  05_taker_flow/run.py   fetch | check | sorts | spanning | fmb | combo
 ```
 
 Run order: part 02 `sorts`, then `robust`; part 03 `fmb`, `compact`, `spanning`; part 04. Each reads part 02's

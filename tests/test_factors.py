@@ -112,3 +112,16 @@ def test_fama_macbeth_recovers_slope():
     S, summ = fama_macbeth({"x": x, "z": z}, fwd, uni, every=7, winsor=0, h=7)
     assert S["x"].mean() == pytest.approx(0.02, abs=0.002)
     assert abs(summ.loc["z", "t_nw"]) < 3 and summ.loc["x", "t_nw"] > 10
+
+
+def test_taker_flow_characteristics():
+    idx = pd.date_range("2024-01-01", periods=10, freq="D", tz="UTC")
+    qv = pd.DataFrame({"A": 100.0, "B": 100.0}, index=idx)
+    tb = pd.DataFrame({"A": 75.0, "B": 25.0}, index=idx)              # A: 75 % taker buys, B: 25 %
+    imb = xs.taker_imbalance(tb, qv, 3)
+    assert np.allclose(imb["A"].dropna(), 0.5) and np.allclose(imb["B"].dropna(), -0.5)
+    assert np.allclose(xs.taker_shift(tb, qv, 2, 5).dropna(), 0.0)    # constant flow: no shift
+    tr = pd.DataFrame({"A": 10.0, "B": 50.0}, index=idx)
+    ts = xs.trade_size(qv, tr, 5).dropna()
+    assert np.allclose(ts["A"], np.log(10.0)) and np.allclose(ts["B"], np.log(2.0))
+    assert xs.taker_imbalance(tb, qv * 0, 3).isna().all().all()        # no volume -> NaN, not inf

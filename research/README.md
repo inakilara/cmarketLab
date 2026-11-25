@@ -7,7 +7,7 @@ brings their findings together.
 | # | Analysis | Question | Status |
 |---|---|---|---|
 | 01 | [btc_cycle](01_btc_cycle/README.md) | When is BTC at or near a mid/long-term (~6-month) top or bottom? Four parts: price and microstructure, rotation and dispersion, macro, flow / basis / dominance | done 2026-11-24: leverage cycle (open-interest flush / build-up) plus rate expectations for bottoms; the rest coincident or failing |
-| 02 | [crypto_factors](02_crypto_factors/README.md) | Which coin characteristics drive the cross-section of perp returns? Decile long-short portfolios and Fama-MacBeth on 50 characteristics, top-100 and OI-weighted | parts 01-04 done 2026-11-24: one trend factor (recent, regime-dependent); liquidation imbalance robust; OI leverage and OI growth negative in regressions; no risk / size / liquidity / funding premium |
+| 02 | [crypto_factors](02_crypto_factors/README.md) | Which coin characteristics drive the cross-section of perp returns? Decile long-short portfolios and Fama-MacBeth on 50 characteristics, top-100 and OI-weighted | parts 01-05 done 2026-11-25: one trend factor (recent, regime-dependent); taker flow and liquidation imbalance robust (largely the same signal); OI leverage and OI growth negative in regressions; no risk / size / liquidity / funding premium |
 
 ## Layout of a project
 
