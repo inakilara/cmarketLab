@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+cache/
+
+# regenerable outputs; CSV, JSON and PNG results stay tracked
+research/**/*.parquet
+research/**/*.log
+research/**/*.err

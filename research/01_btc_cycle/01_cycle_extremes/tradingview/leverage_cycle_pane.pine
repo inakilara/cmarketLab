@@ -1,0 +1,42 @@
+// BTC leverage cycle: the two leverage lines with their thresholds, in a separate pane (pairs with
+// leverage_cycle.pine). Use on a 1D chart. See that script for the definitions.
+//@version=6
+indicator("BTC leverage cycle: lines", shorttitle = "LevCycle lines", overlay = false, format = format.price, precision = 3)
+
+pxSym = input.symbol("BINANCE:BTCUSDT.P", "BTC price")
+oiSym = input.symbol("BINANCE:BTCUSDT.P_OI", "BTC open interest")
+oiInUsd = input.bool(false, "Open-interest symbols are quoted in USD (convert to coins)")
+smoothN = input.int(7, "Smoothing (days)", minval = 1)
+chgN = input.int(90, "Change window (days)", minval = 1)
+bottomTh = input.float(-0.15, "Bottom threshold (BTC OI)", step = 0.01)
+buildTh = input.float(0.10, "Leverage-building threshold (BTC OI)", step = 0.01)
+topTh = input.float(0.15, "Top threshold (market leverage)", step = 0.01)
+useTop = input.bool(true, "Plot market leverage")
+
+if not (timeframe.isdaily and timeframe.multiplier == 1)
+    runtime.error("LevCycle lines: use a 1D chart.")
+
+px = request.security(pxSym, "D", close)
+oiRaw = request.security(oiSym, "D", close)
+oiBtc = oiInUsd ? oiRaw / px : oiRaw
+m7 = ta.sma(oiBtc, smoothN)
+oiChg = math.log(m7) - math.log(m7[chgN])
+
+oiUsdOf(string base) =>
+    o = request.security("BINANCE:" + base + "USDT.P_OI", "D", close)
+    p = request.security("BINANCE:" + base + "USDT.P", "D", close)
+    oiInUsd ? o : o * p
+
+num = oiUsdOf("BTC") + oiUsdOf("ETH") + oiUsdOf("SOL") + oiUsdOf("XRP") + oiUsdOf("BNB") + oiUsdOf("DOGE") +
+     oiUsdOf("ADA") + oiUsdOf("LINK") + oiUsdOf("AVAX")
+cap = request.security("CRYPTOCAP:TOTAL", "D", close) - request.security("CRYPTOCAP:USDT", "D", close) -
+     request.security("CRYPTOCAP:USDC", "D", close)
+l7 = ta.sma(num / cap, smoothN)
+levChg = math.log(l7) - math.log(l7[chgN])
+
+plot(oiChg, "BTC OI (in BTC), 90d log change", color = #1f77b4, linewidth = 2)
+plot(useTop ? levChg : na, "Market OI / market cap, 90d log change", color = #d1651b, linewidth = 2)
+hline(0, "zero", color = color.gray, linestyle = hline.style_solid)
+hline(bottomTh, "bottom zone (BTC OI)", color = #1f77b4, linestyle = hline.style_dashed)
+hline(buildTh, "leverage building (BTC OI)", color = color.new(#1f77b4, 50), linestyle = hline.style_dotted)
+hline(topTh, "top zone (market leverage)", color = #d1651b, linestyle = hline.style_dashed)

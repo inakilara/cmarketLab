@@ -1,0 +1,129 @@
+// BTC leverage cycle: mid/long-term bottom and top zones (cmarketLab, research/01_btc_cycle/01_cycle_extremes)
+// Overlay for a 1D BTC chart: colours the background by reading and lists the current values in a table.
+//
+// Each daily bar:
+//   M        = 7-day SMA of BTCUSDT perpetual open interest, in BTC
+//   oiChg    = ln(M) - ln(M 90 days ago)
+//   state    = bear if ln(close / SMA200(close)) < 0, bull if > 0
+//   lev      = sum over 9 majors of (OI x price) / (CRYPTOCAP:TOTAL - USDT - USDC)
+//   levChg   = ln(SMA7(lev)) - ln(SMA7(lev) 90 days ago); "hot" day if levChg > +0.15
+//   bear and oiChg <= -0.15                       -> BOTTOM ZONE  (leverage flushed)
+//   bear and oiChg >= +0.10                       -> bear, leverage still building (not a bottom)
+//   bull and hot today and >= 30 hot of last 60   -> TOP ZONE     (sustained leverage build-up)
+//   bull and oiChg <= -0.10                       -> bull, deleveraged (weak reading)
+// Thresholds are log changes (-0.15 = -13.9 %, +0.10 = +10.5 %, +0.15 = +16.2 %).
+//
+// The study measured the top rule on all ~400 Binance perps / their market cap. Here it uses 9 majors over
+// TradingView's total market cap ex stablecoins: 0.97 correlation in the study data, and the same two top-zone
+// episodes (2024-12, 2025-07), with about 20 % more top-zone days.
+//@version=6
+indicator("BTC leverage cycle", shorttitle = "LevCycle", overlay = true, max_labels_count = 500)
+
+// ---- inputs
+grpS = "Data"
+pxSym = input.symbol("BINANCE:BTCUSDT.P", "BTC price", group = grpS)
+oiSym = input.symbol("BINANCE:BTCUSDT.P_OI", "BTC open interest", group = grpS)
+oiInUsd = input.bool(false, "Open-interest symbols are quoted in USD (convert to coins)", group = grpS,
+     tooltip = "TradingView quotes Binance USDT-M open interest in coins (BTC OI about 70-140k). Tick this only if your OI symbol shows USD values.")
+
+grpR = "Rule (study 01 defaults)"
+smoothN = input.int(7, "Smoothing (days)", minval = 1, group = grpR)
+chgN = input.int(90, "Change window (days)", minval = 1, group = grpR)
+maN = input.int(200, "Trend MA (days)", minval = 1, group = grpR)
+bottomTh = input.float(-0.15, "Bottom zone: BTC OI change <=", step = 0.01, group = grpR)
+buildTh = input.float(0.10, "Bear, leverage building: BTC OI change >=", step = 0.01, group = grpR)
+resetTh = input.float(-0.10, "Bull, deleveraged: BTC OI change <=", step = 0.01, group = grpR)
+topTh = input.float(0.15, "Top zone: market leverage change >", step = 0.01, group = grpR)
+topDays = input.int(30, "Top zone: hot on at least N days", minval = 1, group = grpR)
+topWin = input.int(60, "... of the last M days", minval = 1, group = grpR)
+
+grpV = "Display"
+useTop = input.bool(true, "Show top zone (needs 9 OI symbols + CRYPTOCAP)", group = grpV)
+showWeak = input.bool(true, "Shade 'leverage building' and 'deleveraged' readings", group = grpV)
+showLabels = input.bool(true, "Label the first day of each bottom / top zone", group = grpV)
+showTable = input.bool(true, "Show the current reading", group = grpV)
+
+if not (timeframe.isdaily and timeframe.multiplier == 1)
+    runtime.error("LevCycle: use a 1D chart (the rule is defined on daily bars).")
+
+// ---- BTC: state and open-interest change
+px = request.security(pxSym, "D", close)
+oiRaw = request.security(oiSym, "D", close)
+oiBtc = oiInUsd ? oiRaw / px : oiRaw
+
+ma200 = math.log(px / ta.sma(px, maN))
+m7 = ta.sma(oiBtc, smoothN)
+oiChg = math.log(m7) - math.log(m7[chgN])
+
+// ---- market leverage (approximation: 9 majors / total market cap ex stablecoins)
+oiUsdOf(string base) =>
+    o = request.security("BINANCE:" + base + "USDT.P_OI", "D", close)
+    p = request.security("BINANCE:" + base + "USDT.P", "D", close)
+    oiInUsd ? o : o * p
+
+num = oiUsdOf("BTC") + oiUsdOf("ETH") + oiUsdOf("SOL") + oiUsdOf("XRP") + oiUsdOf("BNB") + oiUsdOf("DOGE") +
+     oiUsdOf("ADA") + oiUsdOf("LINK") + oiUsdOf("AVAX")
+capTotal = request.security("CRYPTOCAP:TOTAL", "D", close)
+capStable = request.security("CRYPTOCAP:USDT", "D", close) + request.security("CRYPTOCAP:USDC", "D", close)
+lev = num / (capTotal - capStable)
+l7 = ta.sma(lev, smoothN)
+levChg = math.log(l7) - math.log(l7[chgN])
+hot = levChg > topTh
+hotCount = math.sum(hot ? 1 : 0, topWin)
+
+// ---- reading (same precedence as cmarketlab.indicators.cycle.leverage_cycle)
+bear = ma200 < 0
+bull = ma200 > 0
+isBottom = bear and oiChg <= bottomTh
+isBuilding = bear and oiChg >= buildTh and not isBottom
+isTop = useTop and bull and hot and hotCount >= topDays
+isReset = bull and oiChg <= resetTh and not isTop
+
+reading = na(ma200) or na(oiChg) ? "n/a" : isBottom ? "BOTTOM ZONE" : isBuilding ? "bear, leverage building" :
+     isTop ? "TOP ZONE" : isReset ? "bull, deleveraged" : bear ? "bear" : "bull"
+
+// ---- display
+cBottom = color.new(#1f77b4, 70)
+cBuild = color.new(#1f77b4, 88)
+cTop = color.new(#d1651b, 70)
+cReset = color.new(#d1651b, 88)
+bgcolor(isBottom ? cBottom : isTop ? cTop : showWeak and isBuilding ? cBuild : showWeak and isReset ? cReset : na,
+     title = "Reading")
+
+// first day of a zone after 60 quiet days (the study's episode definition)
+firstOf(bool z) =>
+    gap = ta.barssince(z[1])
+    z and (na(gap) or gap >= 60)
+
+newBottom = firstOf(isBottom)  // evaluated on every bar (ta.barssince needs a continuous history)
+newTop = firstOf(isTop)
+if showLabels and newBottom
+    label.new(bar_index, low, "bottom zone", style = label.style_label_up, color = #1f77b4, textcolor = color.white,
+         size = size.small)
+if showLabels and newTop
+    label.new(bar_index, high, "top zone", style = label.style_label_down, color = #d1651b, textcolor = color.white,
+         size = size.small)
+
+// values in the data window
+plot(100 * (math.exp(oiChg) - 1), "BTC OI 90d change %", display = display.data_window)
+plot(100 * (math.exp(levChg) - 1), "Market leverage 90d change %", display = display.data_window)
+plot(hotCount, "Hot days in window", display = display.data_window)
+plot(100 * (math.exp(ma200) - 1), "Close vs 200d MA %", display = display.data_window)
+
+var table tb = table.new(position.top_right, 2, 5, bgcolor = color.new(color.gray, 85), border_width = 1)
+if showTable and barstate.islast
+    table.cell(tb, 0, 0, "Reading", text_halign = text.align_left)
+    table.cell(tb, 1, 0, reading, text_color = isBottom ? #1f77b4 : isTop ? #d1651b : chart.fg_color)
+    table.cell(tb, 0, 1, "Close vs 200d MA", text_halign = text.align_left)
+    table.cell(tb, 1, 1, str.tostring(100 * (math.exp(ma200) - 1), "#.0") + " %")
+    table.cell(tb, 0, 2, "BTC OI 90d (7d avg)", text_halign = text.align_left)
+    table.cell(tb, 1, 2, str.tostring(100 * (math.exp(oiChg) - 1), "#.0") + " %")
+    table.cell(tb, 0, 3, "Market leverage 90d", text_halign = text.align_left)
+    table.cell(tb, 1, 3, str.tostring(100 * (math.exp(levChg) - 1), "#.0") + " %")
+    table.cell(tb, 0, 4, "Hot days (of " + str.tostring(topWin) + ")", text_halign = text.align_left)
+    table.cell(tb, 1, 4, str.tostring(hotCount, "#") + " / " + str.tostring(topDays) + " needed")
+
+// alerts (fire on the daily close)
+alertcondition(isBottom and not isBottom[1], "Bottom zone entered", "BTC leverage cycle: bottom zone entered")
+alertcondition(isTop and not isTop[1], "Top zone entered", "BTC leverage cycle: top zone entered")
+alertcondition(isBuilding and not isBuilding[1], "Bear, leverage building", "BTC leverage cycle: bear market with leverage still building")
